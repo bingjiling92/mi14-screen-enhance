@@ -1,0 +1,16 @@
+# 运行时生成物（模块在开机时生成到 /data/adb/mi14_screen_enhance/，不应进仓库）
+gen/
+run/
+status.log
+*.log
+
+# 打包产物
+*.zip
+dist/
+
+# 编辑器 / 系统杂项
+.DS_Store
+*~
+*.swp
+.idea/
+.vscode/

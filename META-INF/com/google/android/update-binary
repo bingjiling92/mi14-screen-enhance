@@ -1,0 +1,25 @@
+#!/sbin/sh
+# Magisk / 其他安装器入口（KernelSU 主要走 customize.sh）
+# Copyright (c) 2026 bingjiling92 | SPDX-License-Identifier: MIT
+umask 022
+ui_print() { echo "$1"; }
+[ ! "$MODPATH" ] && MODPATH=${0%/*}
+
+ui_print "************************************************"
+ui_print "   小米14 屏幕基础亮度增强 v1.1"
+ui_print "   Copyright (c) 2026 bingjiling92 | MIT"
+ui_print "************************************************"
+ui_print "- 设备: $(getprop ro.product.model) ($(getprop ro.product.device))"
+if [ "$(getprop ro.product.device)" != "houji" ]; then
+  ui_print "! 非 houji：开机脚本会自行跳过，不会改动系统"
+fi
+
+chown -R 0:0 "$MODPATH" 2>/dev/null
+chmod -R 0644 "$MODPATH" 2>/dev/null
+chmod 0755 "$MODPATH" 2>/dev/null
+for f in post-fs-data.sh service.sh uninstall.sh action.sh; do
+  [ -f "$MODPATH/$f" ] && chmod 0755 "$MODPATH/$f"
+done
+ui_print "- 档位: $(grep -o 'PROFILE=[A-Za-z0-9_-]*' "$MODPATH/config.conf" 2>/dev/null | head -1 | cut -d= -f2)"
+ui_print "- 安装完成，重启后生效"
+exit 0
