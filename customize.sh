@@ -9,7 +9,8 @@ command -v set_perm >/dev/null 2>&1 || set_perm() { chown $1:$2 "$3" 2>/dev/null
 command -v set_perm_recursive >/dev/null 2>&1 || set_perm_recursive() { chown -R $1:$2 "$5" 2>/dev/null; chmod -R $4 "$5" 2>/dev/null; }
 
 ui_print "************************************************"
-ui_print "   小米14 屏幕基础亮度增强 v1.2"
+VER=$(grep -o '^version=.*' "$MODPATH/module.prop" 2>/dev/null | head -1 | cut -d= -f2)
+ui_print "   小米14 屏幕基础亮度增强 ${VER:-unknown}"
 ui_print "   Copyright (c) 2026 bingjiling92 | MIT"
 ui_print "************************************************"
 ui_print ""

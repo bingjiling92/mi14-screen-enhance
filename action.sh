@@ -25,5 +25,7 @@ echo "---- 挂载点当前内容 ----"
 grep -o '<transitionPoint>[^<]*' "/product/$SUBPATH" 2>/dev/null
 grep -o '<minimumLux>[^<]*' "/product/$SUBPATH" 2>/dev/null
 echo ""
+echo "注: 最低亮度 mBacklightMinimum 由 framework 资源决定，本模块无法调整"
+echo ""
 echo "---- 日志尾部 ----"
 tail -n 15 "$WORK/status.log" 2>/dev/null || echo "(无日志)"

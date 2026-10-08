@@ -6,7 +6,8 @@ ui_print() { echo "$1"; }
 [ ! "$MODPATH" ] && MODPATH=${0%/*}
 
 ui_print "************************************************"
-ui_print "   小米14 屏幕基础亮度增强 v1.2"
+VER=$(grep -o '^version=.*' "$MODPATH/module.prop" 2>/dev/null | head -1 | cut -d= -f2)
+ui_print "   小米14 屏幕基础亮度增强 ${VER:-unknown}"
 ui_print "   Copyright (c) 2026 bingjiling92 | MIT"
 ui_print "************************************************"
 ui_print "- 设备: $(getprop ro.product.model) ($(getprop ro.product.device))"
