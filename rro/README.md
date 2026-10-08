@@ -45,6 +45,19 @@
    `idmap2` 只能给出 `no resources were overlaid`。
    而平台私钥不在设备上（ROM 只带平台证书，不带私钥）。
 
+3. 还试过**绕过策略检查**：`idmap2 create --ignore-overlayable` 手动生成 idmap，
+   放到 OMS 期望的路径（`/data/resource-cache/<apk路径把 / 换成 @>@idmap`）。
+   手动生成的 idmap 本身是好的：
+
+   ```
+   Mapping:
+       0x0105011d -> 0x7f010001 (dimen/config_screenBrightnessSettingMinimumFloat)
+   Constraints: None
+   ```
+
+   但 **OMS 不认**：启用后仍然是 `STATE_NO_IDMAP`，而且它会**把我放进去的 idmap 直接删掉**
+   再自己重新生成（生成又失败）。所以这条路也被堵死。
+
 **所以：本工程只有在「拿到平台签名」或「换一个声明了 overlayable 的 ROM」时才有用。**
 产物与完整构建链保留在这里，未来条件满足时可以直接用。
 
