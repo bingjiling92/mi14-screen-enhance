@@ -126,4 +126,21 @@ for v in product vendor; do
         log "挂载失败 $s -> $d"
     fi
 done
+# ---------- 6. 可选：最低亮度 RRO ----------
+# 本模块改不了最低亮度（见 README「关于最低亮度」）。若你把自行编译的 overlay
+# APK 放到 $WORK/rro/，这里把它挂进 /product/overlay/，service.sh 再执行
+# cmd overlay enable。没有该 APK 时这一步什么都不做。
+for apk in "$WORK/rro"/*.apk; do
+    [ -f "$apk" ] || continue
+    d="/product/overlay/$(basename "$apk")"
+    if mount --bind "$apk" "$d" 2>/dev/null; then
+        chown root:root "$d" 2>/dev/null
+        chmod 0644 "$d" 2>/dev/null
+        restorecon "$d" 2>/dev/null
+        log "已挂载 RRO $apk -> $d"
+    else
+        log "RRO 挂载失败 $apk -> $d"
+    fi
+done
+
 log "done"

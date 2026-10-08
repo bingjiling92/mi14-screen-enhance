@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (c) 2026 bingjiling92 | SPDX-License-Identifier: MIT
+
+  ⚠ 必须用 <item type="dimen" format="float"> 而不是 <dimen>：
+    原厂这两个资源在 APK 里是以 TYPE_FLOAT(0x04) 存储的
+    （在 AospFrameworkResOverlay.apk 的 resources.arsc 中可验证：
+     Res_value = 08 00 04 00 09 07 60 3a，即 float 0.000854597）。
+    写成 <dimen>0.0002</dimen> 会被 aapt2 当成非法 dimen（缺单位），
+    写成 0.0002dp 则会被编码成 packed dimen(0x05)，与目标类型不符，
+    idmap2 会因 type mismatch 拒绝该条目。
+
+  调这个值：
+    原厂 0.000854597。调小 = 更暗。
+    如果滑杆最下面一段变成「没反应」（夹住了），说明已经压到硬件底了，
+    可以把值调大一点；如果还能一路变暗，就继续调小。
+-->
+<resources>
+    <item type="dimen" format="float" name="config_screenBrightnessSettingMinimumFloat">0.0002</item>
+    <item type="dimen" format="float" name="config_screenBrightnessDimFloat">0.0002</item>
+</resources>

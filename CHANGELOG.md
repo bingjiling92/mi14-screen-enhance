@@ -1,5 +1,21 @@
 # 更新日志 / Changelog
 
+## v1.3 (2026-10-08)
+
+* 新增 `rro/` 最低亮度 RRO 工程，并在模块里预置了可选的挂载 + 启用钩子
+  （`post-fs-data.sh` 第 6 步挂到 `/product/overlay/`，`service.sh` 执行
+  `cmd overlay enable`；没有 APK 时完全不动）。
+* **把 RRO 这条路实测到底并如实记录**：APK 已在手机上编译、签名、`pm install` 成功，
+  但 `cmd overlay enable` 后状态为 `STATE_NO_IDMAP`，`idmap2 create` 报
+  `no resources were overlaid`。根因是 framework-res **没有声明任何 overlayable**
+  （解析其 `resources.arsc`：只有 TYPE/TYPE_SPEC/STAGED_ALIAS，无 OVERLAYABLE/
+  OVERLAYABLE_POLICY），而平台私钥不在设备上。
+  → **结论：本 ROM 上最低亮度无法通过免平台签名的软件手段降低。**
+* 新增可在**手机上完成**的完整构建链（不需要电脑、不需要 Java）：
+  `build-phone.sh`（aapt2 + 一个旧格式 android.jar）+ `sign-apk.py` / `sign-apk.sh`
+  （openssl + 纯 Python 手写 JAR v1 签名；因为本机 Termux 的 JVM 会被
+  `/system_ext/lib64/libjpeg-hyper.so` 带崩）。
+
 ## v1.2 (2026-10-08)
 
 * **上限再抬一档**：默认档位改为 `max`（`<transitionPoint>` = `0.952386766`，基础亮度上限

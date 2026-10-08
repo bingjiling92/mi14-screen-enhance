@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  小米14 最低亮度 RRO（运行时资源覆盖）
+  Copyright (c) 2026 bingjiling92 | SPDX-License-Identifier: MIT
+
+  目标：framework-res 的
+        android:dimen/config_screenBrightnessSettingMinimumFloat
+        android:dimen/config_screenBrightnessDimFloat
+  这两个值（原厂都是 0.000854597）就是「最低亮度」与「dim 亮度」，
+  由 DisplayDeviceConfig.loadBrightnessConstraintsFromConfigXml() 读取，
+  displayconfig XML 碰不到它们，只能用 RRO 覆盖。
+
+  targetName 故意不写：实测目标 framework-res 没有 named overlayable
+  （dumpsys overlay 里 mTargetOverlayableName = null），写了反而会被拒。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.bingjiling92.mi14.dimfloor"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <application
+        android:hasCode="false"
+        android:label="mi14 dim floor" />
+
+    <!-- priority 给高值，保证比其它 framework-res overlay 更优先。
+
+         关于是否加 android:isStatic="true"：
+          - 不加（默认，本文件当前状态）：作为普通 preinstall overlay，
+            PM 扫到后默认可能是「已安装但未启用」，需要本模块在 service.sh 里
+            执行 cmd overlay enable。代价是「丢 APK 后第一次重启只完成启用，
+            第二次重启最低亮度才真正生效」。
+          - 加 true：开机扫描即自动启用、不可被禁用，一次重启就生效；
+            代价是不能运行时关掉（只能删 APK），且个别 ROM 会拒绝未被
+            OverlayConfig 登记的 static overlay。
+         两种都试过的成本很低：改这一行重新 build 即可。 -->
+    <!-- android:targetName 是**必需的**：不加的话 pm install 阶段就被拒——
+           "Overlay ... and target android signed with different certificates,
+            and the overlay lacks <overlay android:targetName>"
+         实测：值不被校验（连 BOGUSNAME 都能装进去），真正的限制在 idmap2 的
+         overlayable 策略检查（见 README：本 ROM 的 framework-res 没有 overlayable，
+         所以这条路在本机不可用）。若目标 ROM 声明了 overlayable，这里要写真实名字。 -->
+    <overlay
+        android:targetPackage="android"
+        android:priority="9999"
+        android:targetName="SystemConfig"
+        android:isStatic="false" />
+</manifest>

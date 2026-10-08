@@ -113,6 +113,31 @@ private void loadBrightnessConstraintsFromConfigXml() {
 * 附带说明：`cmd overlay fabricate` 也做不到——它只接受整数类型（`dataType ∈ [16,31]`），
   而这个资源是 dimen/float。
 
+### RRO 也不行（已实测到底）
+
+「只有 RRO 能改」这句话在**这台 ROM 上同样走不通**。RRO 工程（见 [`rro/`](rro/README.md)）
+已经做好、在手机上编译并签名、`pm install` 也装上了，但：
+
+```
+cmd overlay enable  -> 状态 STATE_NO_IDMAP
+idmap2 create       -> no resources were overlaid -> failed to create idmap
+```
+
+两条硬性限制：
+
+1. 覆盖 `android` 的 overlay 必须**与目标同签名**，或声明
+   `<overlay android:targetName="...">`（实测不加 `targetName` 时 `pm install`
+   直接失败；加了任意字符串就能装进去）。
+2. 但真正卡死的是：**framework-res 一个具名 overlayable 都没有。**
+   解析其 `resources.arsc`，包内 chunk 只有 `TYPE(0x0201) x465`、
+   `TYPE_SPEC(0x0202) x48`、`STAGED_ALIAS(0x0206) x1` —— **没有
+   `OVERLAYABLE(0x0204)`、也没有 `OVERLAYABLE_POLICY(0x0205)`**。
+   没有 overlayable ⇒ 非平台签名的 overlay 无法映射其中任何资源，
+   而平台私钥不在设备上。
+
+**所以：本机最低亮度无法通过任何免平台签名的软件手段降低。** 完整证据与构建链保留在
+[`rro/`](rro/README.md)，换 ROM 或拿到平台签名时可直接用。
+
 **可以马上用的替代方案**：本机已支持 Android 自带的「**极暗 / Reduce bright colors**」
 （`reduce_bright_colors_level` 可调，当前 57）。它是用色彩变换把亮度压到硬件下限**以下**，
 正好就是「还能更暗」这件事：
@@ -195,7 +220,7 @@ bind mount 只存在于内存，**不修改系统分区**，重启后不挂载�
 
 | 项 | 原因 |
 |---|---|
-| 不改最低亮度 | 由 framework 资源 `config_screenBrightnessSettingMinimumFloat` 决定，displayconfig 碰不到（见上文） |
+| 不改最低亮度 | 由 framework 资源 `config_screenBrightnessSettingMinimumFloat` 决定，displayconfig 碰不到；RRO 也被平台权限挡住（见上文） |
 | 不改 `screenBrightnessMap` | 那是面板标定。自动亮度是「环境光 → 目标 nits → backlight」两步换算，改 nits 列会让自动亮度整体算错 |
 | 不改 `sdrHdrRatioMap` | HDR 亮度走 `getHdrBrightnessFromSdr()`，**与 `transitionPoint` 无关**，本次不需要动，也就不会削弱 HDR |
 | 不改热控配置 | `thermal_brightness_control.xml` 等是小米的热控兜底。留着它，机器变热时高亮度会被自动压回来，这是**安全网** |
