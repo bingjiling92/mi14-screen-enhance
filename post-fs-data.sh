@@ -29,9 +29,19 @@ log "start MODDIR=$MODDIR"
 # ---------- 1. 档位 -> 目标值 ----------
 PROF=$(grep -o '^[[:space:]]*PROFILE=[A-Za-z0-9_-]*' "$MODDIR/config.conf" 2>/dev/null | head -1 | cut -d= -f2)
 case "$PROF" in
-    balanced) TP_NEW=0.808082041 ; LUX_NEW=     ;;
-    max)      TP_NEW=0.952386766 ; LUX_NEW=2000 ;;
-    *)        log "档位 '$PROF' 非法，回退 balanced"; PROF=balanced; TP_NEW=0.808082041; LUX_NEW= ;;
+    balanced|safe) TP_NEW=0.808082041 ;;
+    max|high)      TP_NEW=0.952386766 ;;
+    *)             log "档位 '$PROF' 非法，回退 max"; PROF=max; TP_NEW=0.952386766 ;;
+esac
+
+# 阳光屏（HBM）介入所需环境光：留空 = 保持原厂；填数字则改成该值。
+# 与亮度上限解耦——只有你真的想改才改，避免顺带引入热/耗电副作用。
+RAW_LUX=$(sed -n 's/^[[:space:]]*SUNLIGHT_MIN_LUX=[[:space:]]*\([^[:space:]]*\).*/\1/p' "$MODDIR/config.conf" 2>/dev/null | head -1)
+LUX_NEW=""
+case "$RAW_LUX" in
+    '') ;;
+    *[!0-9]*) log "SUNLIGHT_MIN_LUX 非纯数字('$RAW_LUX')，保持原厂" ;;
+    *) LUX_NEW=$RAW_LUX ;;
 esac
 log "profile=$PROF  transitionPoint->$TP_NEW  minimumLux->${LUX_NEW:-保持原厂}"
 

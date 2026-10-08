@@ -17,24 +17,24 @@
 ## 一句话
 
 小米14 在 **非 HBM（非阳光屏）状态下，亮度天花板被锁死在 500 nits** —— 亮度滑杆推到底、
-室内、自动亮度，最高都只有 **500 nits**。本模块把它抬到 **1000 nits**（可选 1400 nits）。
+室内、自动亮度，最高都只有 **500 nits**。本模块把它抬到 **1400 nits**（可退回 1000 nits 档）。
 
 ## 效果实测
 
-| 档位 | `<transitionPoint>` | 滑杆上限 | 实测 |
+| 档位 | `<transitionPoint>` | 滑杆上限 | 状态 |
 |---|---|---|---|
 | 原厂 | `0.499938` | 500 nits | — |
-| **`balanced`（默认）** | `0.808082041` | **1000 nits** | ✅ 已实测 |
-| `max`（可选） | `0.952386766` | **1400 nits** | 实测户外已达过 |
+| `balanced` / `safe`（可选） | `0.808082041` | 1000 nits | ✅ 已实测 |
+| **`max` / `high`（默认）** | `0.952386766` | **1400 nits** | ✅ 户外阳光档位实测达到过 |
 
 装上重启后，`dumpsys display` 里的数值变化：
 
 ```
 改前：mCachedBrightnessInfo.brightnessMax=0.499938
-改后：mCachedBrightnessInfo.brightnessMax=0.80808204
+改后：mCachedBrightnessInfo.brightnessMax=0.95238674
 ```
 
-以及一条实测的亮度事件（**它证明亮度真的上去了**）：
+以及实测的亮度事件（**证明亮度真的上去了**）：
 
 ```
 16:29:09.022  BrightnessEvent: brt=0.80808204 (100.0%), nits= 1000.0, lux=2308.2, hbmMode=off
@@ -42,7 +42,10 @@
 
 * `lux=2308` 远低于阳光屏门槛（5882 lux），说明这是**基础亮度**的提升，不是靠阳光屏蹭出来的。
 * 同一台机器在改前，100% 滑杆室内只有 `nits=500.0`。
-* 该次开机共 **18 条** 事件的 `brt` 超过了旧的 0.499938 —— 旧天花板确实已被移除。
+* 1400 nits 是本机户外阳光模式（`hbmMode=sunlight`）已经实测达到过的档位，属面板已验证范围。
+
+> 再往上（>1400 nits）就进入亮度表里的 HDR 峰值区间（`1.0 = 2800 nits`），全屏持续不可持续，
+> 且已超出 MIUI 自家热控表允许的范围，因此本模块不提供。
 
 ## 原理
 
@@ -70,21 +73,60 @@ float getCurrentBrightnessMax() {
 而滑杆最高会请求 `0.952386766`（1400 nits）——请求值落在 `(0.499938, 0.952386766]`
 的这一大段行程全被夹平成同一个亮度，**推上去没反应**。
 
-本模块只改这一个字段（`max` 档另加 `minimumLux`），把天花板抬到
-`0.808082041`。取值依据：**1000 nits 正是小米自家热控表
-（`common_multi_factor_thermal_brightness_control.xml`）在高环境光档位允许的上限**，
-而 1400 nits 是本机户外阳光模式下已经实测达到过的值 —— 都在面板已验证范围内。
+本模块只改这一个字段，把天花板抬到 `0.952386766`。
 
-## 为什么是这两个值
+## 关于最低亮度（重要）
 
-| 值 | 依据 |
-|---|---|
-| `0.808082041` → 1000 nits | 小米自家热控表在「≥5500 lux 且 ≤36°C」档位给出的上限，是小米认可的档位 |
-| `0.952386766` → 1400 nits | 实测本机户外阳光模式（`hbmMode=sunlight`）已跑到过，属面板已验证范围 |
+**本模块无法调整最低亮度**，这不属于它的能力范围。原因不是配置没找对，而是机制上不通：
 
-两者都严格 `< 1.0`：framework 中 `transitionPoint >= backlightMaximum(1.0)` 会抛
-`IllegalArgumentException`，且该异常**不在** `initFromFile()` 的 catch 列表里，
-可能直接把 system_server 拖崩。模块在开机时会自己做这项校验，**不通过就不挂载**。
+设备自身 `services.jar` 里 `DisplayDeviceConfig.loadBrightnessConstraintsFromConfigXml()`
+的签名是 `()V`（**根本不接收 XML 参数**），它只从 framework 资源取值：
+
+```java
+private void loadBrightnessConstraintsFromConfigXml() {
+    Resources r = mContext.getResources();
+    float f1 = r.getFloat(R.dimen.config_screenBrightnessSettingMinimumFloat); // 8.54597E-4
+    float f2 = r.getFloat(R.dimen.config_screenBrightnessSettingMaximumFloat);
+    if (f1 != -2.0f && f2 != -2.0f) {          // 两个都设了才走浮点路径
+        mBacklightMinimum = f1;
+        mBacklightMaximum = f2;
+    } else {
+        mBacklightMinimum = BrightnessSynchronizer.brightnessIntToFloat(
+                r.getInteger(R.integer.config_screenBrightnessSettingMinimum));
+        ...
+    }
+    mBrightnessDim = r.getFloat(R.dimen.config_screenBrightnessDimFloat); // 也是 8.54597E-4
+}
+```
+
+而已核实的其它事实：
+
+* `loadBrightnessMap()`（读 `<screenBrightnessMap>` 的那个方法）**从不给 `mBacklightMinimum` 赋值**。
+* `constrainNitsAndBacklightArrays()` 反过来会用 `mBacklightMinimum` 去**夹住** XML 里的亮度表，
+  所以往 XML 里塞更低的点也没用。
+* 在设备上实测：`android:dimen/config_screenBrightnessSettingMinimumFloat` = `8.54597E-4`，
+  与 `dumpsys display` 的 `mBacklightMinimum=8.54597E-4` 完全一致 —— 证实上面这条路径。
+* 结论：**最低亮度由 framework 资源决定，只能靠 RRO（运行时资源覆盖）去改**。
+  本机 `/product/overlay/AospFrameworkResOverlay.apk` 就在覆盖这个 dimen，说明它可被覆盖，
+  但造一个 overlay APK 需要 `aapt2`（本机环境没有），而且覆盖 framework 资源通常要求
+  overlay APK 具备平台级签名。
+* 附带说明：`cmd overlay fabricate` 也做不到——它只接受整数类型（`dataType ∈ [16,31]`），
+  而这个资源是 dimen/float。
+
+**可以马上用的替代方案**：本机已支持 Android 自带的「**极暗 / Reduce bright colors**」
+（`reduce_bright_colors_level` 可调，当前 57）。它是用色彩变换把亮度压到硬件下限**以下**，
+正好就是「还能更暗」这件事：
+
+```sh
+settings put secure reduce_bright_colors_activated 1     # 开启
+settings put secure reduce_bright_colors_level 100       # 调强度（越大越暗）
+settings put secure reduce_bright_colors_activated 0     # 关闭
+```
+
+或直接用快捷设置里的「极暗」磁贴。
+
+顺带一提：框架下限对应的面板原始背光是 `25 / 4095`，所以硬件本身**确实还有往下余量**——
+只是那部分只能由 RRO 打开。
 
 ## 安装
 
@@ -98,16 +140,23 @@ float getCurrentBrightnessMax() {
 
 **重启后生效。** framework 只在开机时读一次这个配置，没有运行时重载入口。
 
-## 档位切换
+## 配置
 
 编辑 `/data/adb/modules/mi14_screen_enhance/config.conf`：
 
 ```ini
-PROFILE=balanced   # 默认，天花板 1000 nits
-PROFILE=max        # 激进，天花板 1400 nits + 阳光屏更早介入（minimumLux 5882→2000）
+# 亮度上限档位
+PROFILE=max          # 默认，1400 nits（别名 high）
+# PROFILE=balanced   # 保守，1000 nits（别名 safe）
+
+# 阳光屏（HBM）介入所需环境光，单位 lux
+SUNLIGHT_MIN_LUX=    # 留空 = 保持原厂 5882；填 2000 可让阳光屏更早介入
 ```
 
-改完**重启**生效。填错会自动回退 `balanced`。
+改完**重启**生效。档位填错回退 `max`。
+
+> `SUNLIGHT_MIN_LUX` 与亮度上限是**解耦**的：v1.1 曾把「改成 2000」捆在 `max` 档里，
+> 那会顺带把热控负担提上去；现在不改它就完全保持原厂。
 
 ## 验证
 
@@ -115,7 +164,7 @@ PROFILE=max        # 激进，天花板 1400 nits + 阳光屏更早介入（mini
 # 模块状态日志（开机自检 + 生效证据，由 service.sh 自动采集）
 cat /data/adb/mi14_screen_enhance/status.log
 
-# 实时生效值：balanced 应看到 brightnessMax=0.80808204
+# 实时生效值：默认档应看到 brightnessMax=0.95238674
 dumpsys display | grep -E 'mCachedBrightnessInfo.brightnessMax='
 
 # 挂载点
@@ -124,8 +173,6 @@ grep displayconfig /proc/mounts
 # 当前挂载进去的内容
 grep -E '<transitionPoint>|<minimumLux>' /product/etc/displayconfig/display_id_*.xml
 ```
-
-KernelSU 管理器里点本模块的**「操作」**按钮，会一次性打印以上全部状态。
 
 ## 卸载 / 回滚
 
@@ -148,6 +195,7 @@ bind mount 只存在于内存，**不修改系统分区**，重启后不挂载�
 
 | 项 | 原因 |
 |---|---|
+| 不改最低亮度 | 由 framework 资源 `config_screenBrightnessSettingMinimumFloat` 决定，displayconfig 碰不到（见上文） |
 | 不改 `screenBrightnessMap` | 那是面板标定。自动亮度是「环境光 → 目标 nits → backlight」两步换算，改 nits 列会让自动亮度整体算错 |
 | 不改 `sdrHdrRatioMap` | HDR 亮度走 `getHdrBrightnessFromSdr()`，**与 `transitionPoint` 无关**，本次不需要动，也就不会削弱 HDR |
 | 不改热控配置 | `thermal_brightness_control.xml` 等是小米的热控兜底。留着它，机器变热时高亮度会被自动压回来，这是**安全网** |
@@ -192,12 +240,17 @@ On stock firmware the panel is capped at **500 nits** whenever HBM / sunlight mo
 engaged — even with the slider at 100%. That cap is `mHbmData.transitionPoint`
 (`0.499938`) in `HighBrightnessModeController.getCurrentBrightnessMax()`.
 
-This module raises it to **1000 nits** (`0.808082041`, default) or **1400 nits**
-(`0.952386766`, `max` profile), verified on-device (`nits=1000.0` at `lux=2308`,
-`hbmMode=off`).
+This module raises it to **1400 nits** (`0.952386766`, default) or **1000 nits**
+(`0.808082041`, `balanced` profile), verified on-device.
 
 The module derives the patched `displayconfig` **at boot from the device's own stock file** —
 no Xiaomi proprietary file is redistributed. It only ever touches the two tags
-`<transitionPoint>` and (`max` profile) `<minimumLux>`.
+`<transitionPoint>` and (optional) `<minimumLux>`.
+
+**The minimum brightness is NOT adjustable by this module**: it comes from the framework
+resource `android:dimen/config_screenBrightnessSettingMinimumFloat`, read by
+`loadBrightnessConstraintsFromConfigXml()` (which takes no XML input). Only an RRO can
+change it. As a workaround, Android's built-in *Reduce bright colors* goes below the
+hardware minimum — see the section above.
 
 **Copyright (c) 2026 bingjiling92 — MIT License.** See [LICENSE](LICENSE).
