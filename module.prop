@@ -1,6 +1,6 @@
 id=mi14_screen_enhance
 name=小米14 屏幕基础亮度增强
-version=v1.4
-versionCode=14000
+version=v1.5
+versionCode=15000
 author=bingjiling92
-description=抬升小米14(houji)非HBM状态下的屏幕基础亮度上限：transitionPoint 0.499938→0.952386766（滑杆上限 500→1400 nits），可选 balanced 档 1000 nits。开机从设备自身原厂 displayconfig 现场派生，不随包分发小米文件。需 Root(KernelSU/Magisk)，重启生效。
+description=抬升小米14(houji)非HBM状态下的屏幕基础亮度请求上限：transitionPoint 0.499938→0.952386766（滑杆请求 500→1400 nits）。注意应用值另受 MIUI OPR 按画面灰度限流：白底页面 1000 nits、暗画面最高 1400 nits。可选 balanced 档请求 1000 nits。开机从设备自身原厂 displayconfig 现场派生，不随包分发小米文件。需 Root(KernelSU/Magisk)，重启生效。

@@ -17,7 +17,9 @@
 ## 一句话
 
 小米14 在 **非 HBM（非阳光屏）状态下，亮度天花板被锁死在 500 nits** —— 亮度滑杆推到底、
-室内、自动亮度，最高都只有 **500 nits**。本模块把它抬到 **1400 nits**（可退回 1000 nits 档）。
+室内、自动亮度，最高都只有 **500 nits**。本模块把请求上限抬到 **1400 nits**（可退回 1000 nits 档）。
+**但注意**：应用值还要过小米自己的 **OPR 限亮**，它按画面平均灰度动态选档 ——
+白底页面 1000 nits，暗画面最高 1400 nits（详见下文「补测」）。
 
 ## 效果实测
 
@@ -25,7 +27,7 @@
 |---|---|---|---|
 | 原厂 | `0.499938` | 500 nits | — |
 | `balanced` / `safe`（可选） | `0.808082041` | 1000 nits | ✅ 已实测 |
-| **`max` / `high`（默认）** | `0.952386766` | **1400 nits** | ✅ 户外阳光档位实测达到过 |
+| **`max` / `high`（默认）** | `0.952386766` | 请求 1400 nits | ✅ 请求层实测到 1400；应用值受 MIUI OPR 限流（白底 1000 / 暗画面最高 1400） |
 
 装上重启后，`dumpsys display` 里的数值变化：
 
@@ -42,10 +44,44 @@
 
 * `lux=2308` 远低于阳光屏门槛（5882 lux），说明这是**基础亮度**的提升，不是靠阳光屏蹭出来的。
 * 同一台机器在改前，100% 滑杆室内只有 `nits=500.0`。
-* 1400 nits 是本机户外阳光模式（`hbmMode=sunlight`）已经实测达到过的档位，属面板已验证范围。
+* `mOprNitThreshold` 表里最高档就是 **1400 nits**，说明这个面板/固件本身允许到 1400。
 
 > 再往上（>1400 nits）就进入亮度表里的 HDR 峰值区间（`1.0 = 2800 nits`），全屏持续不可持续，
 > 且已超出 MIUI 自家热控表允许的范围，因此本模块不提供。
+
+### 补测（v1.5）：1400 nits 会被 MIUI 的 OPR 按「画面灰度」限流
+
+把滑杆拉到 100% 后实测发现：**请求层确实到了 1400 nits，但应用层还有一道小米自己的闸。**
+
+```
+mBasedBrightness         = 0.95238656    ← 模块推上去的请求（≈1400 nits）
+mActualBacklight         = 0.80808204    ← 实际应用（= 1000 nits）
+mAppliedMaxOprBrightness = 0.80808204    ← 小米 OPR 限亮，就是它夹的
+```
+
+OPR（Xiaomi `Opr Brightness Control`）**按屏幕内容平均灰度动态选档**：
+
+```
+mCurrentGrayScale      = 231.0                                    ← 当时是白底页面
+mOprGrayscaleThreshold = [160,170,180,190,200,210,220,230]
+mOprNitThreshold       = [1400,1350,1300,1250,1200,1150,1100,1050,1000]
+                        ⇒ 231 ≥ 230 ⇒ 选 1000 nits
+```
+
+所以真实效果是**分场景**的：
+
+| 画面内容 | 原厂 | `balanced` | `max`（默认） |
+|---|---|---|---|
+| 白底页面（灰度 ≥230） | 500 nits | 1000 nits | **1000 nits** |
+| 暗画面（灰度 <160） | 500 nits | 1000 nits | **最高 1400 nits** |
+
+* 原厂 500 nits 的实测证据：`mCachedBrightnessInfo.brightnessMax=0.499938`、
+  `brt=0.499938 (100.0%), nits=500.0, hbmMax=0.499938`。
+* 「1000→1400」这一段行程原厂是**推上去没反应**的（被 `transitionPoint` 夹平）；
+  本模块把请求放开后，**能用满多少由 OPR 按画面灰度决定** ——
+  白底页面 1000 nits 是 MIUI 的硬上限，不是模块没生效。
+* `mOprNitThreshold` 最高档为 1400，说明面板/固件允许到 1400；
+  当前画面灰度落在 1000 那一档，所以白底页面看到的就是 1000。
 
 ## 原理
 
@@ -171,7 +207,7 @@ settings put secure reduce_bright_colors_activated 0     # 关闭
 
 ```ini
 # 亮度上限档位
-PROFILE=max          # 默认，1400 nits（别名 high）
+PROFILE=max          # 默认，请求上限 1400 nits（别名 high）；应用值受 OPR 按画面灰度限流
 # PROFILE=balanced   # 保守，1000 nits（别名 safe）
 
 # 阳光屏（HBM）介入所需环境光，单位 lux
@@ -265,8 +301,21 @@ On stock firmware the panel is capped at **500 nits** whenever HBM / sunlight mo
 engaged — even with the slider at 100%. That cap is `mHbmData.transitionPoint`
 (`0.499938`) in `HighBrightnessModeController.getCurrentBrightnessMax()`.
 
-This module raises it to **1400 nits** (`0.952386766`, default) or **1000 nits**
+This module raises the *request* ceiling to **1400 nits** (`0.952386766`, default) or **1000 nits**
 (`0.808082041`, `balanced` profile), verified on-device.
+
+**Note (v1.5):** the *applied* brightness is then gated by Xiaomi's own **OPR**
+(`Opr Brightness Control`), which caps the peak by the screen's average grayscale:
+bright/white content (`mCurrentGrayScale >= 230`) is capped at **1000 nits**, while
+dark content (`< 160`) is allowed up to **1400 nits**. Measured with the slider at 100%:
+
+```
+mBasedBrightness         = 0.95238656   (request = module's ceiling, ~1400 nits)
+mActualBacklight         = 0.80808204   (applied  = 1000 nits)
+mAppliedMaxOprBrightness = 0.80808204   (the clamp)
+mCurrentGrayScale        = 231.0
+mOprNitThreshold         = [1400,1350,...,1000]   -> picked 1000
+```
 
 The module derives the patched `displayconfig` **at boot from the device's own stock file** —
 no Xiaomi proprietary file is redistributed. It only ever touches the two tags

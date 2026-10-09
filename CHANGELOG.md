@@ -1,5 +1,32 @@
 # 更新日志 / Changelog
 
+## v1.5 (2026-10-09)
+
+**只改描述，不改逻辑** —— 把「500 → 1400 nits」这个说法按实测补齐条件。
+
+把亮度滑杆拉到 100% 后实测发现：**请求层确实到了 1400 nits，但应用层被小米自己的
+OPR（`Opr Brightness Control`）按「画面平均灰度」动态限流**：
+
+```
+mBasedBrightness         = 0.95238656    ← 模块推上去的请求（≈1400 nits）
+mActualBacklight         = 0.80808204    ← 实际应用（= 1000 nits）
+mAppliedMaxOprBrightness = 0.80808204    ← 就是它夹的
+mCurrentGrayScale        = 231.0         ← 当时是白底页面
+mOprGrayscaleThreshold   = [160,170,180,190,200,210,220,230]
+mOprNitThreshold         = [1400,1350,1300,1250,1200,1150,1100,1050,1000]
+                          ⇒ 231 ≥ 230 ⇒ 选 1000 nits
+```
+
+因此真实效果分场景：
+
+| 画面内容 | 原厂 | `balanced` | `max`（默认） |
+|---|---|---|---|
+| 白底页面（灰度 ≥230） | 500 nits | 1000 nits | **1000 nits** |
+| 暗画面（灰度 <160） | 500 nits | 1000 nits | **最高 1400 nits** |
+
+* README / `module.prop` / 配置注释全部按此修正，并补记实测字段与 OPR 表。
+* 原厂 500 nits 的实测证据不变：`brightnessMax=0.499938`、`brt=0.499938 nits=500`。
+
 ## v1.4 (2026-10-08)
 
 * **安装横幅版本号改为从 `module.prop` 动态读取**，修掉 v1.2/v1.3 时期
